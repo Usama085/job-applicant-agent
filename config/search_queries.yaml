@@ -1,0 +1,38 @@
+# Job search configuration
+# Add more queries, locations, or platforms as needed
+
+queries:
+  - title: "DevOps Engineer"
+    locations:
+      - "Lahore"
+    experience_max_years: 3
+    remote_ok: true
+
+  # Uncomment to add more search queries:
+  # - title: "Site Reliability Engineer"
+  #   locations:
+  #     - "Lahore"
+  #     - "Karachi"
+  #   experience_max_years: 3
+
+  # - title: "Cloud Engineer"
+  #   locations:
+  #     - "Lahore"
+  #   experience_max_years: 4
+
+  # - title: "Platform Engineer"
+  #   locations:
+  #     - "Lahore"
+  #   experience_max_years: 3
+
+platforms:
+  linkedin:
+    base_search_url: "https://www.linkedin.com/jobs/search/"
+    sort_by: "date"
+    time_filter: "r86400"       # Past 24 hours
+    easy_apply_only: false      # false = also attempt external links
+
+  indeed:
+    base_search_url: "https://pk.indeed.com/jobs"
+    sort_by: "date"
+    date_posted: "1"            # Last 24 hours

@@ -1,0 +1,49 @@
+# User Profile -- auto-fill data for job applications
+# Fill in your actual information before running the agent
+
+personal:
+  first_name: "Hamza"
+  last_name: "Akhtar"
+  full_name: "Hamza Akhtar"
+  email: "your.email@example.com"
+  phone: "+92-300-1234567"
+  location: "Lahore, Pakistan"
+  linkedin_url: "https://www.linkedin.com/in/your-profile"
+
+professional:
+  current_title: "DevOps Engineer"
+  current_company: "Current Company"
+  years_of_experience: 3
+  summary: >
+    DevOps Engineer with 3 years of experience in CI/CD pipelines,
+    cloud infrastructure (AWS/Azure), containerization (Docker, Kubernetes),
+    and infrastructure as code (Terraform). Passionate about automation
+    and improving deployment workflows.
+
+application_defaults:
+  cover_letter: |
+    Dear Hiring Manager,
+
+    I am writing to express my interest in the {title} position at {company}.
+    With 3 years of experience in DevOps engineering, I have developed strong
+    skills in CI/CD pipeline design, cloud infrastructure management, and
+    containerization technologies.
+
+    I am confident that my experience and skills make me a strong candidate
+    for this role. I look forward to discussing how I can contribute to your team.
+
+    Best regards,
+    Hamza Akhtar
+  salary_expectation: "Negotiable"
+  work_authorization: "Authorized to work in Pakistan"
+  visa_sponsorship_required: false
+  availability_date: "Immediate"
+  willing_to_relocate: true
+  notice_period: "2 weeks"
+
+references:
+  - name: "Reference Name"
+    title: "Senior Manager"
+    company: "Previous Company"
+    email: "reference@example.com"
+    phone: "+92-300-9876543"

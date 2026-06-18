@@ -1,0 +1,9 @@
+playwright==1.49.1
+playwright-stealth==2.0.2
+python-dotenv==1.0.1
+pyyaml==6.0.2
+tenacity==9.0.0
+pydantic==2.10.0
+pypdf==5.1.0
+python-docx==1.1.2
+openpyxl==3.1.5

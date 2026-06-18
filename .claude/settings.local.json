@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip --version:*)",
+      "Bash(python -m venv:*)",
+      "Bash(venvScriptspip.exe install -r requirements.txt)",
+      "Bash(\"C:\\\\Users\\\\HamzaAkhtar\\\\Documents\\\\AI Agent\\\\venv\\\\Scripts\\\\pip.exe\" install -r \"C:\\\\Users\\\\HamzaAkhtar\\\\Documents\\\\AI Agent\\\\requirements.txt\")",
+      "Bash(\"C:\\\\Users\\\\HamzaAkhtar\\\\Documents\\\\AI Agent\\\\venv\\\\Scripts\\\\pip.exe\" list)",
+      "Bash(\"C:\\\\Users\\\\HamzaAkhtar\\\\Documents\\\\AI Agent\\\\venv\\\\Scripts\\\\pip.exe\" install pytest pytest-asyncio)",
+      "Bash(\"C:\\\\Users\\\\HamzaAkhtar\\\\Documents\\\\AI Agent\\\\venv\\\\Scripts\\\\python.exe\" -m pytest tests/ -v)",
+      "Bash(\"C:\\\\Users\\\\HamzaAkhtar\\\\Documents\\\\AI Agent\\\\venv\\\\Scripts\\\\python.exe\" -c \"from job_agent.main import main; print\\(''All imports OK''\\)\")"
+    ]
+  }
+}
