@@ -1,37 +1,76 @@
-# Environment
+# --- Secrets & local environment ---
 .env
-venv/
-.venv/
+.env.local
+.env.*.local
 
-# Python
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
-*.egg-info/
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
 dist/
 build/
+*.egg-info/
 *.egg
+pip-wheel-metadata/
 
-# Runtime data
+# --- Testing & type checking ---
+.pytest_cache/
+pytest-cache-files-*/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+
+# --- Runtime / generated data (never commit) ---
+data/
+
+# --- Local config overrides (commit *.example.yaml templates instead) ---
+config/profile.local.yaml
+config/profile.yaml
+config/search_queries.local.yaml
+
+# --- Reports & exports ---
+*.xlsx
+*.xls
+data/reports/
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Browser automation sessions ---
 data/browser_data/
-data/db/
-data/logs/
-data/screenshots/
-data/resumes/*.pdf
+playwright/.cache/
 
-# IDE
+# --- IDE & editor ---
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+.project
+.pydevproject
+.settings/
 
-# OS
+# --- OS junk ---
 Thumbs.db
 Desktop.ini
 .DS_Store
+ehthumbs.db
+Icon?
 
-# Test
-.pytest_cache/
-.coverage
-htmlcov/
-.mypy_cache/
+# --- Cursor / local tooling ---
+.cursor/
+.claude/
+
+# --- Accidental / stray files ---
+/=

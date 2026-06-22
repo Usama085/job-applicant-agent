@@ -30,6 +30,7 @@ def load_profile(path: Path | None = None) -> UserProfile:
     personal = data.get("personal", {})
     professional = data.get("professional", {})
     defaults = data.get("application_defaults", {})
+    education = data.get("education", {})
     refs_data = data.get("references", [])
 
     references = [
@@ -51,6 +52,9 @@ def load_profile(path: Path | None = None) -> UserProfile:
         phone=personal.get("phone", ""),
         location=personal.get("location", ""),
         linkedin_url=personal.get("linkedin_url", ""),
+        street_address=personal.get("street_address", ""),
+        postcode=personal.get("postcode", ""),
+        country=personal.get("country", ""),
         current_title=professional.get("current_title", ""),
         current_company=professional.get("current_company", ""),
         years_of_experience=int(professional.get("years_of_experience", 0)),
@@ -62,6 +66,10 @@ def load_profile(path: Path | None = None) -> UserProfile:
         availability_date=defaults.get("availability_date", "Immediate"),
         willing_to_relocate=bool(defaults.get("willing_to_relocate", True)),
         notice_period=defaults.get("notice_period", ""),
+        education_degree=education.get("degree", ""),
+        graduation_year=int(education["graduation_year"])
+        if education.get("graduation_year")
+        else None,
         references=references,
     )
 

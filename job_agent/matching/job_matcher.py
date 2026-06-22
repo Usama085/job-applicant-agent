@@ -23,6 +23,20 @@ class JobMatcher:
     """Scores job relevance using local keywords and simple deterministic rules."""
 
     ROLE_KEYWORDS = ("devops", "cloud", "platform", "sre", "site reliability")
+    STACK_KEYWORDS = (
+        "full stack",
+        "fullstack",
+        "software engineer",
+        "software developer",
+        "backend",
+        "frontend",
+        "react",
+        "node",
+        "typescript",
+        "mern",
+        "nestjs",
+    )
+    LOCATION_EXCLUDED = {"karachi", "islamabad", "rawalpindi", "faisalabad", "lahore"}
 
     def __init__(
         self,
@@ -52,9 +66,20 @@ class JobMatcher:
                 job_description or "",
             ]
         ).lower()
+        location_text = (job.location or "").lower()
 
         for excluded in self.excluded_keywords:
-            if excluded and excluded in combined_job_text:
+            if not excluded:
+                continue
+            if excluded in self.LOCATION_EXCLUDED:
+                if excluded in location_text:
+                    return MatchResult(
+                        False,
+                        0,
+                        [],
+                        f"Excluded location: {excluded}",
+                    )
+            elif excluded in combined_job_text:
                 return MatchResult(False, 0, [], f"Excluded keyword found: {excluded}")
 
         quality = self.quality_skill.evaluate(job, profile, combined_job_text)
@@ -69,9 +94,13 @@ class JobMatcher:
 
         job_title = (job.title or "").lower()
         query_title = (query.title or "").lower()
-        if "devops" in job_title:
+        if any(term in job_title for term in ("full stack", "fullstack", "software engineer")):
+            score += 25
+        elif "devops" in job_title:
             score += 25
         elif any(token in job_title for token in self.ROLE_KEYWORDS):
+            score += 15
+        elif any(token in job_title for token in self.STACK_KEYWORDS):
             score += 15
         elif query_title and query_title in job_title:
             score += 10

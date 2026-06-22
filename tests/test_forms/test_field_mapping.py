@@ -51,12 +51,21 @@ def test_email_mapping():
     assert value == "hamza@example.com"
 
 
-def test_phone_mapping():
+def test_phone_country_code_mapping():
     mapping = FieldMapping()
     profile = _make_profile()
-    key, value = mapping.find_match("phone number", profile)
-    assert key == "phone"
-    assert value == "+92-300-1234567"
+    key, value = mapping.find_match("phone country code", profile)
+    assert key == "phone_country_code"
+    assert "Pakistan" in value
+
+
+def test_mobile_phone_mapping():
+    mapping = FieldMapping()
+    profile = _make_profile()
+    profile.phone = "+92 300 3644 284"
+    key, value = mapping.find_match("mobile phone number", profile)
+    assert key == "mobile_phone"
+    assert value.startswith("0")
 
 
 def test_linkedin_mapping():
@@ -67,10 +76,13 @@ def test_linkedin_mapping():
     assert value == "https://linkedin.com/in/hamza"
 
 
-def test_experience_mapping():
+def test_experience_with_skill_mapping():
     mapping = FieldMapping()
     profile = _make_profile()
-    key, value = mapping.find_match("years of experience", profile)
+    key, value = mapping.find_match(
+        "how many years of work experience do you have with node.js",
+        profile,
+    )
     assert key == "years_of_experience"
     assert value == "3"
 
@@ -129,3 +141,21 @@ def test_availability_mapping():
     key, value = mapping.find_match("when can you start", profile)
     assert key == "availability_date"
     assert value == "Immediate"
+
+
+def test_postcode_mapping():
+    mapping = FieldMapping()
+    profile = _make_profile()
+    profile.postcode = "54000"
+    key, value = mapping.find_match("postcode", profile)
+    assert key == "postcode"
+    assert value == "54000"
+
+
+def test_street_address_mapping():
+    mapping = FieldMapping()
+    profile = _make_profile()
+    profile.street_address = "Johar Town"
+    key, value = mapping.find_match("street address", profile)
+    assert key == "street_address"
+    assert value == "Johar Town"

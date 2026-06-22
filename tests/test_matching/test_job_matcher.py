@@ -71,7 +71,29 @@ def test_rejects_excluded_location_keyword():
     )
 
     assert not result.allowed
-    assert "excluded keyword" in result.reason.lower()
+    assert "excluded location" in result.reason.lower()
+
+
+def test_allows_lahore_job_when_description_mentions_other_city():
+    matcher = JobMatcher(min_score=65, excluded_keywords=["karachi"])
+    job = Job(
+        platform="linkedin",
+        title="DevOps Engineer",
+        company="Acme",
+        location="Lahore, Punjab, Pakistan (On-site)",
+        job_url="https://example.com/job",
+    )
+    query = SearchQuery(title="DevOps Engineer", location="Lahore")
+
+    result = matcher.score(
+        job=job,
+        query=query,
+        profile=_profile(),
+        resume_text="Docker Kubernetes AWS Terraform CI/CD Linux DevOps",
+        job_description="We have teams in Lahore and Karachi.",
+    )
+
+    assert "excluded" not in result.reason.lower()
 
 
 def test_rejects_low_score_job():

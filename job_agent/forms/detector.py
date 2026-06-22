@@ -25,6 +25,7 @@ class DetectedField:
     is_required: bool = False
     current_value: str | None = None
     options: list[str] = field(default_factory=list)  # For select/radio
+    aria_role: str | None = None
 
     @property
     def identifiers(self) -> str:
@@ -59,71 +60,165 @@ class FormDetector:
             """
             (containerSelector) => {
                 const container = document.querySelector(containerSelector) || document.body;
+
+                const getGroupLabel = (group, input) => {
+                    if (!group) return '';
+                    const explicit = group.querySelector(
+                        '.fb-dash-form-element__label, .artdeco-form-element__label, ' +
+                        '[data-test-text-form-input-label], .jobs-easy-apply-form-section__label, ' +
+                        'span.artdeco-form-element__label, legend, label'
+                    );
+                    if (explicit) {
+                        const text = explicit.textContent.trim();
+                        if (text) return text;
+                    }
+                    const clone = group.cloneNode(true);
+                    clone.querySelectorAll(
+                        'input, textarea, select, button, option, svg'
+                    ).forEach((node) => node.remove());
+                    const text = clone.textContent.replace(/\\s+/g, ' ').trim();
+                    return text.length <= 300 ? text : text.slice(0, 300);
+                };
+
+                const buildSelector = (el) => {
+                    if (el.id) {
+                        return `[id="${el.id.replace(/"/g, '\\\\"')}"]`;
+                    }
+                    if (el.name) {
+                        const tag = el.tagName.toLowerCase();
+                        return `${tag}[name="${el.name.replace(/"/g, '\\\\"')}"]`;
+                    }
+                    const tag = el.tagName.toLowerCase();
+                    const siblings = Array.from(
+                        (el.closest(containerSelector) || container).querySelectorAll(tag)
+                    );
+                    const idx = siblings.indexOf(el);
+                    return `${tag}:nth-of-type(${idx + 1})`;
+                };
+
+                const seen = new Set();
+                const results = [];
+
+                const groupSelectors = [
+                    '.fb-dash-form-element',
+                    '.jobs-easy-apply-form-element',
+                    '.artdeco-form-element',
+                    '[data-test-form-element]',
+                    'fieldset',
+                ];
+
+                for (const groupSelector of groupSelectors) {
+                    for (const group of container.querySelectorAll(groupSelector)) {
+                        const input = group.querySelector(
+                            'input:not([type="hidden"]):not([type="submit"]):not([type="button"]), ' +
+                            'select, textarea'
+                        );
+                        if (!input || seen.has(input)) continue;
+
+                        const style = window.getComputedStyle(input);
+                        if (style.display === 'none' && input.type !== 'file') continue;
+                        if (style.visibility === 'hidden' && input.type !== 'file') continue;
+
+                        seen.add(input);
+                        let labelText = getGroupLabel(group, input);
+
+                        if (!labelText && input.id) {
+                            const label = container.querySelector(`label[for="${input.id}"]`);
+                            if (label) labelText = label.textContent.trim();
+                        }
+                        if (!labelText && input.getAttribute('aria-label')) {
+                            labelText = input.getAttribute('aria-label');
+                        }
+                        if (!labelText && input.getAttribute('aria-labelledby')) {
+                            const labelEl = document.getElementById(
+                                input.getAttribute('aria-labelledby')
+                            );
+                            if (labelEl) labelText = labelEl.textContent.trim();
+                        }
+
+                        let options = [];
+                        if (input.tagName === 'SELECT') {
+                            options = Array.from(input.options)
+                                .map((o) => o.text.trim())
+                                .filter((t) => t);
+                        }
+
+                        const isRequired = input.required ||
+                            input.getAttribute('aria-required') === 'true' ||
+                            group.getAttribute('aria-required') === 'true' ||
+                            (labelText && labelText.includes('*')) ||
+                            !!group.querySelector('[aria-required="true"], .artdeco-form-element--required');
+
+                        let fieldType = input.type || input.tagName.toLowerCase();
+                        if (input.getAttribute('role') === 'combobox') {
+                            fieldType = 'combobox';
+                        } else if (input.inputMode === 'numeric' || input.type === 'number') {
+                            fieldType = 'number';
+                        }
+
+                        results.push({
+                            selector: buildSelector(input),
+                            fieldType,
+                            labelText: labelText || null,
+                            nameAttr: input.name || null,
+                            idAttr: input.id || null,
+                            placeholder: input.placeholder || null,
+                            isRequired,
+                            currentValue: input.value || null,
+                            options,
+                            ariaRole: input.getAttribute('role') || null,
+                        });
+                    }
+                }
+
                 const elements = container.querySelectorAll(
                     'input:not([type="hidden"]):not([type="submit"]):not([type="button"]), ' +
                     'select, textarea'
                 );
-                const results = [];
-
                 for (const el of elements) {
-                    // Skip invisible elements
+                    if (seen.has(el)) continue;
+
                     const style = window.getComputedStyle(el);
                     if (style.display === 'none' && el.type !== 'file') continue;
                     if (style.visibility === 'hidden' && el.type !== 'file') continue;
 
-                    // Find associated label
                     let labelText = '';
                     if (el.id) {
                         const label = container.querySelector(`label[for="${el.id}"]`);
                         if (label) labelText = label.textContent.trim();
                     }
-                    if (!labelText) {
-                        const parentLabel = el.closest('label');
-                        if (parentLabel) labelText = parentLabel.textContent.trim();
-                    }
                     if (!labelText && el.getAttribute('aria-label')) {
                         labelText = el.getAttribute('aria-label');
                     }
-                    if (!labelText && el.getAttribute('aria-labelledby')) {
-                        const labelEl = document.getElementById(el.getAttribute('aria-labelledby'));
-                        if (labelEl) labelText = labelEl.textContent.trim();
+                    if (!labelText) {
+                        labelText = getGroupLabel(el.closest('.artdeco-form-element, fieldset'), el);
                     }
 
-                    // Get options for select elements
                     let options = [];
                     if (el.tagName === 'SELECT') {
-                        options = Array.from(el.options).map(o => o.text.trim()).filter(t => t);
-                    }
-
-                    // Build a unique selector
-                    let selector = '';
-                    if (el.id) {
-                        selector = '#' + CSS.escape(el.id);
-                    } else if (el.name) {
-                        const tag = el.tagName.toLowerCase();
-                        selector = `${tag}[name="${el.name}"]`;
-                    } else {
-                        // Fallback: use nth-of-type
-                        const tag = el.tagName.toLowerCase();
-                        const siblings = Array.from(container.querySelectorAll(tag));
-                        const idx = siblings.indexOf(el);
-                        selector = `${containerSelector} ${tag}:nth-of-type(${idx + 1})`;
+                        options = Array.from(el.options).map((o) => o.text.trim()).filter((t) => t);
                     }
 
                     const isRequired = el.required ||
                         el.getAttribute('aria-required') === 'true' ||
                         (labelText && labelText.includes('*'));
 
+                    let fieldType = el.type || el.tagName.toLowerCase();
+                    if (el.getAttribute('role') === 'combobox') {
+                        fieldType = 'combobox';
+                    }
+
                     results.push({
-                        selector: selector,
-                        fieldType: el.type || el.tagName.toLowerCase(),
+                        selector: buildSelector(el),
+                        fieldType,
                         labelText: labelText || null,
                         nameAttr: el.name || null,
                         idAttr: el.id || null,
                         placeholder: el.placeholder || null,
-                        isRequired: isRequired,
+                        isRequired,
                         currentValue: el.value || null,
-                        options: options,
+                        options,
+                        ariaRole: el.getAttribute('role') || null,
                     });
                 }
                 return results;
@@ -143,6 +238,7 @@ class FormDetector:
                 is_required=raw["isRequired"],
                 current_value=raw["currentValue"],
                 options=raw["options"],
+                aria_role=raw.get("ariaRole"),
             )
             fields.append(f)
 

@@ -40,6 +40,15 @@ class UserProfile:
     willing_to_relocate: bool
     notice_period: str
 
+    # Address (optional — used by Indeed/ATS location forms)
+    street_address: str = ""
+    postcode: str = ""
+    country: str = ""
+
+    # Education (optional)
+    education_degree: str = ""
+    graduation_year: int | None = None
+
     # References
     references: list[Reference] = field(default_factory=list)
 

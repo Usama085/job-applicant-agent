@@ -14,7 +14,14 @@ def test_rejects_non_lahore_locations():
 
     assert not location_filter.is_allowed("Karachi")
     assert not location_filter.is_allowed("Islamabad, Pakistan")
-    assert not location_filter.is_allowed("Remote - Pakistan")
+    assert not location_filter.is_allowed("Remote - United States")
+
+
+def test_accepts_pakistan_remote_jobs():
+    location_filter = LocationFilter(["Lahore", "Remote", "Pakistan"])
+
+    assert location_filter.is_allowed("Pakistan (Remote)")
+    assert location_filter.is_allowed("Remote - Pakistan")
 
 
 def test_missing_location_is_rejected_when_strict():

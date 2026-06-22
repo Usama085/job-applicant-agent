@@ -72,6 +72,17 @@ async def manual_login(platform: str) -> None:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, input, "\nPress ENTER after logging in... ")
 
+        confirm_url = (
+            "https://www.linkedin.com/feed/"
+            if platform == "linkedin"
+            else "https://pk.indeed.com/"
+        )
+        try:
+            await page.goto(confirm_url, wait_until="domcontentloaded")
+            await page.wait_for_timeout(2000)
+        except Exception:
+            pass
+
         await context.close()
         print(f"\nSession saved to: {user_data_dir}")
         print("You can now run the agent and it will use this session.")
