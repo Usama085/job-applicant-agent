@@ -54,6 +54,12 @@ class FieldMapping:
     @staticmethod
     def _get_profile_value(profile: UserProfile, key: str) -> str | None:
         """Get a string value from the profile by key."""
+        if key == "phone_country_code":
+            return "Pakistan (+92)"
+
+        if key == "mobile_phone":
+            return FieldMapping._local_phone(profile.phone)
+
         val = getattr(profile, key, None)
         if val is None:
             return None
@@ -62,6 +68,16 @@ class FieldMapping:
         if isinstance(val, int):
             return str(val)
         return str(val) if val else None
+
+    @staticmethod
+    def _local_phone(phone: str) -> str:
+        """Normalize +92 numbers to local 03xx format for Pakistani forms."""
+        digits = re.sub(r"\D", "", phone or "")
+        if digits.startswith("92"):
+            digits = digits[2:]
+        if digits and not digits.startswith("0"):
+            digits = f"0{digits}"
+        return digits
 
     @staticmethod
     def _build_default_rules() -> list[MappingRule]:
@@ -76,15 +92,33 @@ class FieldMapping:
             MappingRule(p(r"last[\s_.-]?name|surname|family[\s_.-]?name"), "last_name", 10),
             MappingRule(p(r"full[\s_.-]?name|your[\s_.-]?name|^name$|applicant.?name"), "full_name", 9),
             # --- Contact ---
+            MappingRule(p(r"phone\s+country\s+code|country\s+code"), "phone_country_code", 11),
+            MappingRule(p(r"mobile\s+phone|mobile\s+number|cell\s+phone"), "mobile_phone", 11),
             MappingRule(p(r"e[\s_.-]?mail|email.?address"), "email", 10),
-            MappingRule(p(r"phone|mobile|cell|telephone|contact.?number"), "phone", 10),
+            MappingRule(p(r"phone|mobile|cell|telephone|contact.?number"), "phone", 9),
             # --- Location ---
+            MappingRule(
+                p(r"post[\s_.-]?code|zip[\s_.-]?code|postal[\s_.-]?code|pin[\s_.-]?code"),
+                "postcode",
+                10,
+            ),
+            MappingRule(
+                p(r"street[\s_.-]?address|address[\s_.-]?line|home[\s_.-]?address"),
+                "street_address",
+                9,
+            ),
+            MappingRule(p(r"^country$|country.?of.?residence"), "country", 9),
             MappingRule(p(r"city|location|where.?do.?you.?live|current.?location"), "location", 8),
             # --- LinkedIn ---
             MappingRule(p(r"linkedin|linked[\s_.-]?in"), "linkedin_url", 9),
             # --- Professional ---
             MappingRule(
-                p(r"experience|years?.?of.?experience|how.?many.?years|yoe"),
+                p(
+                    r"experience|years?.?of|how\s+many\s+years|total\s+experience|"
+                    r"relevant\s+experience|work\s+experience|yoe|"
+                    r"experience\s+with|experience\s+in|exp\s+in\s+years|"
+                    r"number\s+of\s+years"
+                ),
                 "years_of_experience",
                 8,
             ),
@@ -122,6 +156,16 @@ class FieldMapping:
                 7,
             ),
             MappingRule(p(r"notice[\s_.-]?period|serving.?notice"), "notice_period", 7),
+            MappingRule(
+                p(r"degree|education|qualification|university|college|school"),
+                "education_degree",
+                6,
+            ),
+            MappingRule(
+                p(r"graduation|graduated|year\s+of\s+graduation"),
+                "graduation_year",
+                6,
+            ),
             MappingRule(
                 p(r"relocat|willing.?to.?move|open.?to.?relocation"),
                 "willing_to_relocate",

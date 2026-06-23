@@ -25,13 +25,22 @@ EXPERIENCE_LEVELS = {
 }
 
 # Timeouts
-PAGE_LOAD_TIMEOUT_MS = 15000
-MODAL_TIMEOUT_MS = 5000
-ELEMENT_TIMEOUT_MS = 3000
+PAGE_LOAD_TIMEOUT_MS = 20000
+MODAL_TIMEOUT_MS = 10000
+ELEMENT_TIMEOUT_MS = 10000
+APPLY_BUTTON_WAIT_MS = 12000
 
 # Pagination
 MAX_SEARCH_PAGES = 5
 JOBS_PER_PAGE = 25
 
-# Logged-in indicator
-LOGGED_IN_SELECTOR = ".global-nav__me-photo, .feed-identity-module"
+# Logged-in indicators (LinkedIn changes these often — keep multiple fallbacks)
+LOGGED_IN_SELECTOR = (
+    ".global-nav__me-photo, "
+    ".feed-identity-module, "
+    "button.global-nav__primary-link--me, "
+    "img.global-nav__me-photo, "
+    "[data-test-global-nav-me], "
+    ".global-nav__me-content, "
+    ".feed-shared-update-v2"
+)

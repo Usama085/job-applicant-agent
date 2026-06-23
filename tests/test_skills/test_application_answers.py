@@ -35,6 +35,18 @@ def test_answer_bank_maps_common_application_questions(sample_profile):
     assert answer_bank.answer_for("Do you require visa sponsorship?") == "No"
 
 
+def test_answer_bank_maps_experience_questions(sample_profile):
+    answer_bank = ApplicationAnswerBank(sample_profile)
+
+    assert (
+        answer_bank.answer_for(
+            "How many years of work experience do you have with React?"
+        )
+        == "3"
+    )
+    assert answer_bank.answer_for("Total years of experience") == "3"
+
+
 @pytest.mark.asyncio
 async def test_form_filler_uses_answer_bank_for_unmapped_text_fields(sample_profile):
     filler = FormFiller(sample_profile, FieldMapping(), HumanBehavior())

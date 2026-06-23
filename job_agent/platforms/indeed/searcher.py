@@ -10,6 +10,8 @@ from urllib.parse import urlencode
 from job_agent.database.models import Job
 from job_agent.platforms.base import SearchQuery, SearchResult
 from job_agent.platforms.indeed import constants, selectors
+from job_agent.platforms.indeed.urls import canonical_job_url
+from job_agent.utils.job_identity import job_dedup_key
 
 if TYPE_CHECKING:
     from playwright.async_api import Page
@@ -72,13 +74,15 @@ class IndeedSearcher:
 
             await self.humanizer.random_delay()
 
-        # Deduplicate
-        seen_urls: set[str] = set()
+        # Deduplicate by stable job identity
+        seen_keys: set[str] = set()
         unique_jobs: list[Job] = []
         for job in all_jobs:
-            if job.job_url not in seen_urls:
-                seen_urls.add(job.job_url)
-                unique_jobs.append(job)
+            key = job_dedup_key(job)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            unique_jobs.append(job)
 
         logger.info(
             "Indeed search complete: %d unique jobs from %d pages",
@@ -130,11 +134,10 @@ class IndeedSearcher:
                     // Extract job key for constructing URL
                     const jk = titleEl.getAttribute('data-jk') ||
                                card.querySelector('[data-jk]')?.getAttribute('data-jk');
-                    if (jk && !url) {
+                    if (jk) {
                         url = 'https://pk.indeed.com/viewjob?jk=' + jk;
-                    }
-                    if (url && !url.startsWith('http')) {
-                        url = 'https://pk.indeed.com' + url;
+                    } else if (!url) {
+                        continue;
                     }
 
                     // Company
@@ -152,9 +155,12 @@ class IndeedSearcher:
                     const location = locationEl ? locationEl.textContent.trim() : '';
 
                     // Easy apply badge
-                    const easyApply = card.querySelector(
-                        '.iaLabel, .indeed-apply-badge, .iaIcon'
-                    ) !== null;
+                    const cardText = (card.textContent || '').toLowerCase();
+                    const easyApply = (
+                        card.querySelector('.iaLabel, .indeed-apply-badge, .iaIcon') !== null
+                        || cardText.includes('easily apply')
+                        || cardText.includes('apply now')
+                    );
 
                     if (title && url) {
                         results.push({
@@ -173,13 +179,15 @@ class IndeedSearcher:
         )
 
         for card in cards:
+            jk = card.get("jk") or ""
+            canonical_url = canonical_job_url(card["url"], jk or None)
             job = Job(
                 platform="indeed",
                 title=card["title"],
-                job_url=card["url"],
+                job_url=canonical_url,
                 company=card["company"] or None,
                 location=card["location"] or None,
-                external_id=card.get("jk"),
+                external_id=jk or None,
                 is_easy_apply=card["easyApply"],
                 is_external=not card["easyApply"],
                 discovered_at=datetime.now(),

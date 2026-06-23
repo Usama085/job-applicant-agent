@@ -31,28 +31,42 @@ class IndeedPlatform(BasePlatform):
             await page.goto(constants.HOME_URL, wait_until="domcontentloaded")
             await self.humanizer.random_delay()
 
-            # Check for logged-in indicator
             logged_in = await page.locator(constants.LOGGED_IN_SELECTOR).count()
             if logged_in > 0:
                 logger.info("Indeed: logged in successfully")
                 return True
 
-            # Check if redirected to login
             if "/auth" in page.url or "/login" in page.url:
                 logger.warning("Indeed: session expired (redirected to login)")
                 return False
 
-            # Indeed can work without login for some features
-            # Check for sign-in prompt
-            sign_in = await page.locator(
-                'a[href*="auth"], a:has-text("Sign in")'
-            ).count()
-            if sign_in > 0:
-                logger.warning("Indeed: not logged in (sign-in link visible)")
-                return False
+            cookies = await self.session.context.cookies()
+            auth_cookie_names = {
+                "CTK",
+                "PPID",
+                "SHOE",
+                "SOCK",
+                "INDEED_CSRF_TOKEN",
+                "LV",
+            }
+            if any(
+                cookie.get("name") in auth_cookie_names and cookie.get("value")
+                for cookie in cookies
+            ):
+                logger.info("Indeed: logged in (session cookie present)")
+                return True
 
-            logger.info("Indeed: login status unclear, proceeding")
-            return True
+            account_menu = await page.locator(
+                '[data-gnav-element-name="AccountMenu"], '
+                'button[aria-label*="Account"], '
+                'a[aria-label*="Account"]'
+            ).count()
+            if account_menu > 0:
+                logger.info("Indeed: logged in (account menu visible)")
+                return True
+
+            logger.warning("Indeed: not logged in — run: python scripts/manual_login.py indeed")
+            return False
 
         except Exception as e:
             logger.error("Indeed: login check failed: %s", e)

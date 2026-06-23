@@ -31,16 +31,31 @@ class LinkedInPlatform(BasePlatform):
             await page.goto(constants.FEED_URL, wait_until="domcontentloaded")
             await self.humanizer.random_delay()
 
-            # Check for logged-in element
-            logged_in = await page.locator(constants.LOGGED_IN_SELECTOR).count()
-            if logged_in > 0:
-                logger.info("LinkedIn: logged in successfully")
-                return True
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
 
-            # Check if redirected to login page
-            if "/login" in page.url or "/authwall" in page.url:
+            for selector in constants.LOGGED_IN_SELECTOR.split(", "):
+                if await page.locator(selector.strip()).count() > 0:
+                    logger.info("LinkedIn: logged in successfully")
+                    return True
+
+            if any(
+                marker in page.url
+                for marker in ("/login", "/authwall", "/checkpoint", "/uas/login")
+            ):
                 logger.warning("LinkedIn: session expired (redirected to login)")
                 return False
+
+            cookies = await self.session.context.cookies("https://www.linkedin.com")
+            if any(cookie.get("name") == "li_at" and cookie.get("value") for cookie in cookies):
+                logger.info("LinkedIn: logged in (li_at session cookie present)")
+                return True
+
+            if "/feed" in page.url or page.url.rstrip("/").endswith("linkedin.com"):
+                logger.info("LinkedIn: assuming logged in (active session at %s)", page.url)
+                return True
 
             logger.warning("LinkedIn: login status unclear at %s", page.url)
             return False

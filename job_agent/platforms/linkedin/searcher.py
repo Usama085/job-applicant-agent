@@ -110,6 +110,7 @@ class LinkedInSearcher:
             "location": query.location,
             "f_TPR": "r86400",  # Past 24 hours
             "f_E": exp_filter,
+            "f_AL": "true",     # Easy Apply only
             "sortBy": "DD",     # Sort by date
             "start": str(page_num * constants.JOBS_PER_PAGE),
         }

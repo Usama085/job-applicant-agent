@@ -14,6 +14,7 @@ from job_agent.utils.constants import (
     RANDOM_SKIP_RATE,
     ApplicationStatus,
 )
+from job_agent.utils.job_identity import job_dedup_key, normalize_job_url
 
 if TYPE_CHECKING:
     from job_agent.browser.humanizer import HumanBehavior
@@ -177,6 +178,23 @@ class BasePlatform(ABC):
         # Randomize job order for anti-detection
         random.shuffle(all_jobs)
 
+        # Deduplicate by stable job identity (Indeed tracking URLs share one jk)
+        deduped_jobs: list[Job] = []
+        seen_keys: set[str] = set()
+        for job in all_jobs:
+            key = job_dedup_key(job)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            deduped_jobs.append(job)
+        if len(deduped_jobs) < len(all_jobs):
+            self.logger.info(
+                "Deduplicated search results: %d -> %d unique jobs",
+                len(all_jobs),
+                len(deduped_jobs),
+            )
+        all_jobs = deduped_jobs
+
         # Apply phase
         for job in all_jobs:
             if remaining <= 0:
@@ -198,6 +216,7 @@ class BasePlatform(ABC):
                 continue
 
             # Save job to DB and check for duplicates
+            job.job_url = normalize_job_url(job)
             job_id = self.repository.save_job(job)
             job.id = job_id
 
@@ -240,6 +259,14 @@ class BasePlatform(ABC):
                     status=ApplicationStatus.DUPLICATE,
                 )
                 self.repository.save_application(app)
+                stats["skipped"] += 1
+                continue
+
+            if self.repository.has_apply_attempt(
+                job.job_url,
+                external_id=job.external_id,
+            ):
+                self.logger.debug("Already attempted apply: %s", job.job_url)
                 stats["skipped"] += 1
                 continue
 

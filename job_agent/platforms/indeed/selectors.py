@@ -37,7 +37,10 @@ APPLY_BUTTON = (
     '#indeedApplyButton, '
     'button[id="indeedApplyButton"], '
     '.jobsearch-IndeedApplyButton-newDesign, '
-    'button.indeedApplyButtonContainer'
+    'button.indeedApplyButtonContainer, '
+    '[data-testid="indeedApplyButton"], '
+    'button:has-text("Apply now"), '
+    'a:has-text("Apply now")'
 )
 
 # External apply button
@@ -63,6 +66,7 @@ CONTINUE_BUTTON = (
     'button[id="ia-continue"], '
     'button:has-text("Continue"), '
     'button:has-text("Next"), '
+    'button:has-text("Save and continue"), '
     '.ia-continueButton'
 )
 

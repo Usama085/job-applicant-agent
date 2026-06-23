@@ -48,6 +48,32 @@ class ApplicationRepository:
 
     def save_job(self, job: Job) -> int:
         """Insert a job (ignore if duplicate by platform+url). Returns job id."""
+        if job.external_id:
+            existing = self.conn.execute(
+                "SELECT id FROM jobs WHERE platform = ? AND external_id = ?",
+                (job.platform, job.external_id),
+            ).fetchone()
+            if existing:
+                self.conn.execute(
+                    """
+                    UPDATE jobs
+                    SET title = ?, company = ?, location = ?, job_url = ?,
+                        is_easy_apply = ?, is_external = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        job.title,
+                        job.company,
+                        job.location,
+                        job.job_url,
+                        int(job.is_easy_apply),
+                        int(job.is_external),
+                        existing["id"],
+                    ),
+                )
+                self.conn.commit()
+                return existing["id"]
+
         cursor = self.conn.execute(
             """
             INSERT OR IGNORE INTO jobs
@@ -100,6 +126,49 @@ class ApplicationRepository:
             """,
             (job_url, ApplicationStatus.APPLIED.value),
         ).fetchone()
+        return row["cnt"] > 0 if row else False
+
+    def has_apply_attempt(
+        self,
+        job_url: str,
+        external_id: str | None = None,
+    ) -> bool:
+        """True when we already tried to apply to this job."""
+        from job_agent.platforms.indeed.urls import canonical_job_url, extract_job_key
+
+        jk = external_id or extract_job_key(job_url, None)
+        canonical = canonical_job_url(job_url, jk)
+
+        identity_clauses = ["j.job_url = ?"]
+        params: list[object] = [job_url]
+        if canonical != job_url:
+            identity_clauses.append("j.job_url = ?")
+            params.append(canonical)
+        if jk:
+            identity_clauses.append("j.external_id = ?")
+            params.append(jk)
+
+        query = f"""
+            SELECT COUNT(*) as cnt FROM applications a
+            JOIN jobs j ON a.job_id = j.id
+            WHERE ({' OR '.join(identity_clauses)})
+              AND (
+                    a.status IN (?, ?)
+                    OR (
+                        a.status = ?
+                        AND a.failure_reason LIKE 'Status:%'
+                        AND a.failure_reason NOT LIKE '%No apply button%'
+                    )
+                  )
+        """
+        params.extend(
+            [
+                ApplicationStatus.APPLIED.value,
+                ApplicationStatus.FAILED.value,
+                ApplicationStatus.SKIPPED.value,
+            ]
+        )
+        row = self.conn.execute(query, params).fetchone()
         return row["cnt"] > 0 if row else False
 
     # --- Applications ---

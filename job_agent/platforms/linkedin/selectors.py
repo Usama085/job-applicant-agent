@@ -42,17 +42,39 @@ JOB_DETAIL_TITLE = ".job-details-jobs-unified-top-card__job-title, .jobs-unified
 # Company name on detail page
 JOB_DETAIL_COMPANY = ".job-details-jobs-unified-top-card__company-name, .jobs-unified-top-card__company-name"
 
-# Easy Apply button
+# Easy Apply button (LinkedIn 2025+ uses <a> with aria-label, not button.jobs-apply-button)
 EASY_APPLY_BUTTON = (
+    'a[aria-label*="Easy Apply"], '
+    'button[aria-label*="Easy Apply"], '
     'button.jobs-apply-button[aria-label*="Easy Apply"], '
     'button[data-control-name="jobdetails_topcard_inapply"], '
-    '.jobs-apply-button--top-card'
+    '.jobs-apply-button--top-card button:has-text("Easy Apply"), '
+    'button:has-text("Easy Apply"), '
+    'a:has-text("Easy Apply"), '
+    '#jobs-apply-button-id'
+)
+
+# Any apply control on the job page (Easy Apply or external)
+APPLY_BUTTON = (
+    'a[aria-label*="Easy Apply"], '
+    'a[aria-label*="Apply on company"], '
+    'a[aria-label*="Apply"], '
+    'button[aria-label*="Easy Apply"], '
+    'button[aria-label*="Apply"], '
+    'button.jobs-apply-button, '
+    'a.jobs-apply-button, '
+    '.jobs-apply-button--top-card a, '
+    '.jobs-apply-button--top-card button, '
+    '#jobs-apply-button-id'
 )
 
 # External Apply button
 EXTERNAL_APPLY_BUTTON = (
+    'a[aria-label*="Apply on company"], '
+    'a[aria-label*="Apply"]:not([aria-label*="Easy Apply"]), '
     'button.jobs-apply-button:not([aria-label*="Easy Apply"]), '
-    'a.jobs-apply-button'
+    'a.jobs-apply-button, '
+    'a:has-text("Apply"):not(:has-text("Easy Apply"))'
 )
 
 # === Easy Apply Modal ===
@@ -71,20 +93,26 @@ MODAL_NEXT = (
     'button[aria-label="Continue to next step"], '
     'button[aria-label="Next"], '
     'footer button[data-easy-apply-next-button], '
-    '.artdeco-modal__actionbar button.artdeco-button--primary'
+    '.jobs-easy-apply-footer button.artdeco-button--primary:has-text("Next"), '
+    '.artdeco-modal__actionbar button.artdeco-button--primary:has-text("Next"), '
+    'button:has-text("Continue")'
 )
 
 # Review button in modal
 MODAL_REVIEW = (
     'button[aria-label="Review your application"], '
-    'button[aria-label="Review"]'
+    'button[aria-label="Review"], '
+    'button:has-text("Review")'
 )
 
 # Submit button in modal
 MODAL_SUBMIT = (
     'button[aria-label="Submit application"], '
     'button[aria-label="Submit"], '
-    'footer button[data-easy-apply-submit-button]'
+    'footer button[data-easy-apply-submit-button], '
+    '.jobs-easy-apply-footer button.artdeco-button--primary:has-text("Submit"), '
+    '.artdeco-modal__actionbar button.artdeco-button--primary:has-text("Submit"), '
+    'button:has-text("Submit application")'
 )
 
 # Dismiss/close button after submission

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from datetime import datetime
@@ -9,11 +10,12 @@ from typing import TYPE_CHECKING
 
 from job_agent.database.models import Application
 from job_agent.platforms.indeed import constants, selectors
+from job_agent.platforms.indeed.urls import canonical_job_url
 from job_agent.utils.constants import MAX_FORM_STEPS, ApplicationStatus
 from job_agent.utils.exceptions import CaptchaDetectedError, FormFillingError
 
 if TYPE_CHECKING:
-    from playwright.async_api import Page
+    from playwright.async_api import Locator, Page
 
     from job_agent.browser.humanizer import HumanBehavior
     from job_agent.captcha.detector import CaptchaDetector
@@ -23,6 +25,23 @@ if TYPE_CHECKING:
     from job_agent.forms.resume_uploader import ResumeUploader
 
 logger = logging.getLogger("job_agent.platforms.indeed.applier")
+
+JOB_PAGE_SELECTORS = (
+    selectors.APPLY_BUTTON,
+    selectors.EXTERNAL_APPLY_BUTTON,
+    ".jobsearch-JobComponent",
+    "#jobsearch-ViewjobPaneWrapper",
+    "h1.jobsearch-JobInfoHeader-title",
+    '[data-testid="jobsearch-JobInfoHeader-title"]',
+)
+
+APPLY_BUTTON_SELECTORS = (
+    selectors.APPLY_BUTTON,
+    selectors.EXTERNAL_APPLY_BUTTON,
+    'button:has-text("Apply now")',
+    'a:has-text("Apply now")',
+    '[data-testid="indeedApplyButton"]',
+)
 
 
 class IndeedApplier:
@@ -47,27 +66,22 @@ class IndeedApplier:
     async def apply(self, job: Job) -> Application:
         """Apply to an Indeed job listing."""
         start_time = time.monotonic()
+        job_url = canonical_job_url(job.job_url, job.external_id)
 
-        # Navigate to job page
-        await self.page.goto(job.job_url, wait_until="domcontentloaded")
+        await self.page.goto(job_url, wait_until="domcontentloaded")
         await self.humanizer.random_delay()
+        await self._wait_for_job_page()
 
-        # Check for CAPTCHA
         signal = await self.captcha_detector.check(self.page)
         if signal:
             raise CaptchaDetectedError(
                 platform="indeed",
                 captcha_type=signal.captcha_type,
-                job_url=job.job_url,
+                job_url=job_url,
             )
 
         await self.humanizer.simulate_reading(self.page)
-
-        # Try Indeed's apply flow first, then external
-        if job.is_easy_apply:
-            status = await self._handle_indeed_apply(job)
-        else:
-            status = await self._handle_external_apply(job)
+        status = await self._start_apply_flow(job)
 
         duration_ms = int((time.monotonic() - start_time) * 1000)
 
@@ -79,30 +93,58 @@ class IndeedApplier:
             failure_reason=None if status == ApplicationStatus.APPLIED else f"Status: {status.value}",
         )
 
-    async def _handle_indeed_apply(self, job: Job) -> ApplicationStatus:
-        """Handle Indeed's in-platform apply flow."""
-        # Click the Apply button
-        apply_btn = self.page.locator(selectors.APPLY_BUTTON)
-        try:
-            await apply_btn.first.wait_for(
-                state="visible", timeout=constants.ELEMENT_TIMEOUT_MS
-            )
-            await self.humanizer.human_click(self.page, selectors.APPLY_BUTTON)
-        except Exception:
-            logger.warning("Indeed Apply button not found: %s", job.job_url)
-            # Try the generic apply
-            return await self._handle_external_apply(job)
+    async def _wait_for_job_page(self) -> None:
+        """Wait for the job detail panel to render."""
+        for _ in range(int(constants.PAGE_LOAD_TIMEOUT_MS / 500)):
+            for selector in JOB_PAGE_SELECTORS:
+                if await self.page.locator(selector).count() > 0:
+                    return
+            await asyncio.sleep(0.5)
 
+    async def _find_visible_apply_button(self) -> Locator | None:
+        """Return the first visible apply button on the job page."""
+        for selector in APPLY_BUTTON_SELECTORS:
+            locator = self.page.locator(selector)
+            if await locator.count() == 0:
+                continue
+            try:
+                await locator.first.wait_for(
+                    state="visible",
+                    timeout=constants.ELEMENT_TIMEOUT_MS,
+                )
+                return locator
+            except Exception:
+                continue
+        return None
+
+    async def _start_apply_flow(self, job: Job) -> ApplicationStatus:
+        """Click apply once and route to the correct application flow."""
+        apply_btn = await self._find_visible_apply_button()
+        if apply_btn is None:
+            logger.warning("No apply button found: %s", job.job_url)
+            return ApplicationStatus.SKIPPED
+
+        pages_before = len(self.page.context.pages)
+        await apply_btn.first.click()
         await self.humanizer.random_delay()
 
-        # Indeed may open an iframe or a new page for the apply flow
-        # Check if there's an apply iframe
-        iframe_locator = self.page.locator(selectors.APPLY_IFRAME)
-        if await iframe_locator.count() > 0:
-            return await self._handle_iframe_apply(job)
+        for _ in range(int(constants.NEW_TAB_WAIT_MS / 500)):
+            pages = self.page.context.pages
+            if len(pages) > pages_before:
+                new_page = pages[-1]
+                await new_page.wait_for_load_state("domcontentloaded")
+                return await self._handle_external_page(new_page, job)
 
-        # Otherwise, handle the multi-step form on the page
-        return await self._handle_multi_step_apply(job)
+            if await self.page.locator(selectors.APPLY_IFRAME).count() > 0:
+                return await self._handle_iframe_apply(job)
+
+            if await self._indeed_apply_form_visible():
+                return await self._handle_multi_step_apply(job)
+
+            await asyncio.sleep(0.5)
+
+        logger.warning("Apply flow did not open for: %s", job.title)
+        return ApplicationStatus.FAILED
 
     async def _handle_iframe_apply(self, job: Job) -> ApplicationStatus:
         """Handle Indeed apply when it opens in an iframe."""
@@ -113,11 +155,9 @@ class IndeedApplier:
                 logger.warning("Could not access Indeed apply iframe")
                 return ApplicationStatus.FAILED
 
-            # Process form steps within the iframe
             for step in range(MAX_FORM_STEPS):
                 logger.debug("Indeed iframe apply step %d", step + 1)
 
-                # Upload resume if needed
                 file_inputs = frame.locator('input[type="file"]')
                 if await file_inputs.count() > 0:
                     try:
@@ -128,7 +168,6 @@ class IndeedApplier:
                     except Exception as e:
                         logger.warning("Failed to upload resume in iframe: %s", e)
 
-                # Detect and fill form fields
                 fields = await self.form_detector.detect_fields(frame)
                 if fields:
                     fill_result = await self.form_filler.fill_form(frame, fields, job)
@@ -144,21 +183,11 @@ class IndeedApplier:
 
                 await self.humanizer.think_pause()
 
-                # Look for submit or continue
                 submit = frame.locator(selectors.SUBMIT_BUTTON)
                 if await submit.count() > 0:
                     await submit.first.click()
                     await self.humanizer.random_delay()
-
-                    # Check for success
-                    success = frame.locator(selectors.APPLICATION_SUCCESS)
-                    try:
-                        await success.first.wait_for(
-                            state="visible", timeout=constants.ELEMENT_TIMEOUT_MS
-                        )
-                        return ApplicationStatus.APPLIED
-                    except Exception:
-                        return ApplicationStatus.APPLIED  # Assume success
+                    return ApplicationStatus.APPLIED
 
                 continue_btn = frame.locator(selectors.CONTINUE_BUTTON)
                 if await continue_btn.count() > 0:
@@ -178,7 +207,6 @@ class IndeedApplier:
         for step in range(MAX_FORM_STEPS):
             logger.debug("Indeed apply step %d for: %s", step + 1, job.title)
 
-            # Check for CAPTCHA
             signal = await self.captcha_detector.check(self.page)
             if signal:
                 raise CaptchaDetectedError(
@@ -187,10 +215,8 @@ class IndeedApplier:
                     job_url=self.page.url,
                 )
 
-            # Upload resume
             await self.resume_uploader.upload_if_needed(self.page)
 
-            # Detect and fill form fields
             fields = await self.form_detector.detect_fields(self.page)
             if fields:
                 fill_result = await self.form_filler.fill_form(self.page, fields, job)
@@ -206,31 +232,15 @@ class IndeedApplier:
 
             await self.humanizer.think_pause()
 
-            # Check for submit button
             submit = self.page.locator(selectors.SUBMIT_BUTTON)
             if await submit.count() > 0:
                 await self.humanizer.human_click(self.page, selectors.SUBMIT_BUTTON)
                 await self.humanizer.random_delay()
+                return ApplicationStatus.APPLIED
 
-                # Verify success
-                try:
-                    await self.page.wait_for_selector(
-                        selectors.APPLICATION_SUCCESS,
-                        timeout=constants.ELEMENT_TIMEOUT_MS,
-                    )
-                    return ApplicationStatus.APPLIED
-                except Exception:
-                    # Check URL change as alternate success indicator
-                    if "post-apply" in self.page.url or "submitted" in self.page.url:
-                        return ApplicationStatus.APPLIED
-                    return ApplicationStatus.APPLIED  # Assume success after submit
-
-            # Click continue/next
             continue_btn = self.page.locator(selectors.CONTINUE_BUTTON)
             if await continue_btn.count() > 0:
-                await self.humanizer.human_click(
-                    self.page, selectors.CONTINUE_BUTTON
-                )
+                await self.humanizer.human_click(self.page, selectors.CONTINUE_BUTTON)
                 await self.humanizer.random_delay()
             else:
                 logger.warning("No action button found at step %d", step + 1)
@@ -238,53 +248,40 @@ class IndeedApplier:
 
         return ApplicationStatus.FAILED
 
-    async def _handle_external_apply(self, job: Job) -> ApplicationStatus:
-        """Handle external application links from Indeed."""
-        # Click the apply/external link
-        ext_btn = self.page.locator(selectors.EXTERNAL_APPLY_BUTTON)
-        try:
-            if await ext_btn.count() == 0:
-                # Fall back to generic apply button
-                ext_btn = self.page.locator(selectors.APPLY_BUTTON)
+    async def _indeed_apply_form_visible(self) -> bool:
+        """Return True when Indeed's on-page smart apply form is open."""
+        form_indicators = (
+            "#ia-container",
+            ".ia-Questions",
+            'button[id="ia-continue"]',
+            'button[id="ia-submit"]',
+            "text=Add your location",
+            "text=Submit your application",
+        )
+        for selector in form_indicators:
+            if await self.page.locator(selector).count() > 0:
+                return True
+        return False
 
-            if await ext_btn.count() == 0:
-                logger.warning("No apply button found: %s", job.job_url)
-                return ApplicationStatus.SKIPPED
-        except Exception:
-            return ApplicationStatus.SKIPPED
-
-        # Listen for new tab
-        async with self.page.context.expect_page() as new_page_info:
-            try:
-                await ext_btn.first.click()
-            except Exception:
-                pass
-
-        try:
-            new_page = await new_page_info.value
-            await new_page.wait_for_load_state("domcontentloaded")
-        except Exception:
-            new_page = self.page
-
+    async def _handle_external_page(self, page: Page, job: Job) -> ApplicationStatus:
+        """Fill and submit an employer site opened in a new tab."""
         await self.humanizer.random_delay()
 
-        # Check CAPTCHA on external site
-        signal = await self.captcha_detector.check(new_page)
+        signal = await self.captcha_detector.check(page)
         if signal:
-            if new_page != self.page:
-                await new_page.close()
+            if page != self.page:
+                await page.close()
             raise CaptchaDetectedError(
                 platform="indeed",
                 captcha_type=signal.captcha_type,
-                job_url=new_page.url,
+                job_url=page.url,
             )
 
-        # Try to fill external form
         try:
-            fields = await self.form_detector.detect_fields(new_page)
+            fields = await self.form_detector.detect_fields(page)
             if fields:
-                await self.resume_uploader.upload_if_needed(new_page)
-                fill_result = await self.form_filler.fill_form(new_page, fields, job)
+                await self.resume_uploader.upload_if_needed(page)
+                fill_result = await self.form_filler.fill_form(page, fields, job)
                 if fill_result.unknown_required_count > 0:
                     raise FormFillingError(
                         platform="indeed",
@@ -295,8 +292,7 @@ class IndeedApplier:
                         ),
                     )
 
-            # Try to submit
-            submitted = await self._try_external_submit(new_page)
+            submitted = await self._try_external_submit(page)
             status = (
                 ApplicationStatus.APPLIED
                 if submitted
@@ -307,9 +303,9 @@ class IndeedApplier:
             logger.warning("External apply failed: %s", e)
             status = ApplicationStatus.FAILED
 
-        if new_page != self.page:
+        if page != self.page:
             try:
-                await new_page.close()
+                await page.close()
             except Exception:
                 pass
 

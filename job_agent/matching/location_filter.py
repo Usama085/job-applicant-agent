@@ -6,7 +6,7 @@ from __future__ import annotations
 class LocationFilter:
     """Allows jobs only when their visible location matches configured targets."""
 
-    BLOCKED_TERMS = {"karachi", "islamabad", "rawalpindi", "faisalabad", "remote"}
+    BLOCKED_TERMS = {"karachi", "islamabad", "rawalpindi", "faisalabad"}
 
     def __init__(self, allowed_locations: list[str], strict: bool = True):
         self.strict = strict
@@ -21,8 +21,14 @@ class LocationFilter:
             return not self.strict
 
         normalized = self._normalize(location)
+
+        if "remote" in normalized:
+            if any("remote" in allowed for allowed in self.allowed_locations):
+                return True
+            return "pakistan" in normalized or "lahore" in normalized
+
         if any(term in normalized for term in self.BLOCKED_TERMS):
-            return "lahore" in normalized and "remote" not in normalized
+            return "lahore" in normalized
 
         return any(
             allowed in normalized or normalized in allowed
